@@ -1,29 +1,64 @@
 package controllers
 
 import core.Env
+import play.Logger
+import play.api.Play.current
+import play.api.libs.iteratee.Iteratee
+import play.api.libs.oauth.{ConsumerKey, OAuthCalculator, RequestToken}
+import play.api.libs.ws.WS
 import play.api.mvc.{Action, Controller}
+
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 /**
   * Created by Harley on 2016. 8. 30..
   */
 object Application extends Controller {
 
-  def index = Action { implicit request =>
-    Ok("hello world!!")
+  def index = Action.async {
+
+    val loggingIteratee = Iteratee.foreach[Array[Byte]] { (array: Array[Byte]) =>
+      Logger.info(array.map(_.toChar).mkString)
+    }
+
+    credential().map {
+      case (ck: ConsumerKey, rt: RequestToken) =>
+        WS
+          .url("https://stream.twitter.com/1.1/statuses/filter.json")
+          .sign(OAuthCalculator(ck, rt))
+          .withQueryString("track" -> "지진")
+          .get {
+            response => Logger.info("response status:" + response.status)
+              loggingIteratee
+          }
+          .map {
+            _ => Ok("Stream closed")
+          }
+    } getOrElse {
+      Future.successful {
+        InternalServerError("Twitter credintial Error")
+      }
+    }
   }
-
-  case class ConsumerKey(apiKey: String, apiSecret: String)
-
-  case class RequestToken(token: String, tokenSecret: String)
-
 
   def credential(): Option[(ConsumerKey, RequestToken)] = {
 
-    val apiKey: Option[String] = Env.as[String]("twitter.apiKey")
-    val apiSecret: Option[String] = Env.as[String]("twitter.apiSecret")
-    val token: Option[String] = Env.as[String]("twitter.token")
-    val tokenSecret: Option[String] = Env.as[String]("twitter.tokenSecret")
+    //    import core.EnvParserInstance._
 
+    val apiKey: Option[String] = Env.as[String]("apiKey")
+    val apiSecret: Option[String] = Env.as[String]("apiSecret")
+    val token: Option[String] = Env.as[String]("token")
+    val tokenSecret: Option[String] = Env.as[String]("tokenSecret")
+
+    println("-----------------------")
+    println("-----------------------")
+    println("-----------------------")
+    println("-----------------------")
+    println("apiKey=" + apiKey)
+    println("apiSecret=" + apiSecret)
+    println("token=" + token)
+    println("tokenSecret=" + tokenSecret)
     // 1개라도 값이 없을경우에는 None
     // 모두 4개의 값이 모두 다 Some => Some(ConsumerKey, RequestToken)
 
